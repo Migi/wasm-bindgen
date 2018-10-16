@@ -2171,9 +2171,21 @@ impl<'a, 'b> SubContext<'a, 'b> {
             }
         }
 
-        // Figure out what identifier we're importing from the module. If we've
-        // got a namespace we use that, otherwise it's the name specified above.
-        let name_to_import = import.js_namespace.as_ref().map(|s| &**s).unwrap_or(item);
+        // Figure out what identifier we're importing from the module.
+        // If there is no js_namespace we just import the item directly.
+        // If there is a js_namespace (which may contain dots),
+        // we only import the root namespace.
+        let (name_to_import, suffix) = if let Some(js_ns) = &import.js_namespace {
+            let mut split_iter = js_ns.splitn(2, '.');
+            let name_to_import = split_iter.next().unwrap();
+            if let Some(remainder) = split_iter.next() {
+                (name_to_import, format!(".{}.{}", remainder, item))
+            } else {
+                (name_to_import, format!(".{}", item))
+            }
+        } else {
+            (item, String::new())
+        };
 
         // Here's where it's a bit tricky. We need to make sure that importing
         // the same identifier from two different modules works, and they're
@@ -2247,13 +2259,7 @@ impl<'a, 'b> SubContext<'a, 'b> {
                 }
             });
 
-        // If there's a namespace we didn't actually import `item` but rather
-        // the namespace, so access through that.
-        if import.js_namespace.is_some() {
-            Ok(format!("{}.{}", identifier, item))
-        } else {
-            Ok(identifier.to_string())
-        }
+        Ok(identifier.to_owned() + &suffix)
     }
 }
 

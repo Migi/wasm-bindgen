@@ -61,7 +61,7 @@ pub enum MethodSelf {
 #[derive(Clone)]
 pub struct Import {
     pub module: Option<String>,
-    pub js_namespace: Option<Ident>,
+    pub js_namespace: Option<String>,
     pub kind: ImportKind,
 }
 
@@ -362,16 +362,6 @@ impl Import {
 }
 
 impl ImportKind {
-    /// Whether this type can be inside an `impl` block.
-    pub fn fits_on_impl(&self) -> bool {
-        match *self {
-            ImportKind::Function(_) => true,
-            ImportKind::Static(_) => false,
-            ImportKind::Type(_) => false,
-            ImportKind::Enum(_) => false,
-        }
-    }
-
     fn shared(&self) -> Result<shared::ImportKind, Diagnostic> {
         Ok(match *self {
             ImportKind::Function(ref f) => shared::ImportKind::Function(f.shared()?),

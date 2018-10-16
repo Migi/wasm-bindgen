@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 use std::sync::Mutex;
 
@@ -34,28 +34,38 @@ impl TryToTokens for ast::Program {
         for s in self.structs.iter() {
             s.to_tokens(tokens);
         }
-        let mut types = HashSet::new();
+
+        // Create a map from the js_name of types imported in the same #[wasm_bindgen] block
+        // to the Rust Ident of those types.
+        // TODO: consider js_namespace too?
+        let mut imported_types = HashMap::new();
         for i in self.imports.iter() {
             if let ast::ImportKind::Type(t) = &i.kind {
-                types.insert(t.rust_name.clone());
+                imported_types.insert(&t.js_name, &t.rust_name);
             }
         }
+
         for i in self.imports.iter() {
             DescribeImport(&i.kind).to_tokens(tokens);
 
-            // If there is a js namespace, check that name isn't a type. If it is,
-            // this import might be a method on that type.
-            if let Some(ns) = &i.js_namespace {
-                if types.contains(ns) && i.kind.fits_on_impl() {
-                    let kind = match i.kind.try_to_token_stream() {
-                        Ok(kind) => kind,
-                        Err(e) => {
-                            errors.push(e);
+            // If the import is a normal function, and if it has a js_namespace attribute,
+            // check whether that corresponds to a type imported in the same #[wasm_bindgen] block.
+            // If so, we generate a static function on that type rather than a free function.
+            if let ast::ImportKind::Function(ref i_fn) = i.kind {
+                if let ast::ImportFunctionKind::Normal = i_fn.kind {
+                    if let Some(js_ns) = &i.js_namespace {
+                        if let Some(&rust_ns) = imported_types.get(&js_ns) {
+                            let kind = match i.kind.try_to_token_stream() {
+                                Ok(kind) => kind,
+                                Err(e) => {
+                                    errors.push(e);
+                                    continue;
+                                }
+                            };
+                            (quote! { impl #rust_ns { #kind } }).to_tokens(tokens);
                             continue;
                         }
-                    };
-                    (quote! { impl #ns { #kind } }).to_tokens(tokens);
-                    continue;
+                    }
                 }
             }
 

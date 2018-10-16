@@ -34,7 +34,7 @@ extern "C" {
     type SwitchMethods;
     #[wasm_bindgen(constructor)]
     fn new() -> SwitchMethods;
-    #[wasm_bindgen(js_namespace = SwitchMethods)]
+    #[wasm_bindgen(static_method_of = SwitchMethods)]
     fn a();
     fn switch_methods_called() -> bool;
     #[wasm_bindgen(method)]

@@ -88,11 +88,11 @@ impl BindgenAttrs {
     }
 
     /// Get the first js_namespace attribute
-    fn js_namespace(&self) -> Option<&Ident> {
+    fn js_namespace(&self) -> Option<(&str, Span)> {
         self.attrs
             .iter()
             .filter_map(|a| match a {
-                BindgenAttr::JsNamespace(s) => Some(s),
+                BindgenAttr::JsNamespace(s, span) => Some((&s[..], *span)),
                 _ => None,
             }).next()
     }
@@ -221,7 +221,7 @@ pub enum BindgenAttr {
     Constructor,
     Method,
     StaticMethodOf(Ident),
-    JsNamespace(Ident),
+    JsNamespace(String, Span),
     Module(String),
     Getter(Option<Ident>),
     Setter(Option<Ident>),
@@ -288,7 +288,14 @@ impl Parse for BindgenAttr {
         }
         if attr == "js_namespace" {
             input.parse::<Token![=]>()?;
-            return Ok(BindgenAttr::JsNamespace(input.parse::<AnyIdent>()?.0));
+            let (val, span) = match input.parse::<syn::LitStr>() {
+                Ok(str) => (str.value(), str.span()),
+                Err(_) => {
+                    let ident = input.parse::<AnyIdent>()?.0;
+                    (ident.to_string(), ident.span())
+                }
+            };
+            return Ok(BindgenAttr::JsNamespace(val, span));
         }
         if attr == "extends" {
             input.parse::<Token![=]>()?;
@@ -996,7 +1003,7 @@ impl<'a> MacroParse<&'a BindgenAttrs> for syn::ForeignItem {
             BindgenAttrs::find(attrs)?
         };
         let module = item_opts.module().or(opts.module()).map(|s| s.to_string());
-        let js_namespace = item_opts.js_namespace().or(opts.js_namespace()).cloned();
+        let js_namespace = item_opts.js_namespace().or(opts.js_namespace()).map(|(ns, _span)| ns.to_owned());
         let kind = match self {
             syn::ForeignItem::Fn(f) => f.convert((item_opts, &module))?,
             syn::ForeignItem::Type(t) => t.convert(item_opts)?,
